@@ -1,6 +1,6 @@
 # Script to analyze pox prevalence using partial structural equation models
 # Author: Sabrina McNew
-# Last update: June 2026
+# Last update: Feb 2026
 
 # For stats
 library(piecewiseSEM)
@@ -8,6 +8,7 @@ library(lme4)
 library(lmerTest)
 library(vegan)
 library(mgcv) # for gam
+library(multcompView)
 
 # For plotting
 library(visreg)
@@ -256,12 +257,12 @@ predicted_resids <- visreg(prev_model,"habitat", scale = "response")$res
 
 
 # Visreg plot just means and confidence bands
-predicted_vals %>%
-  ggplot(aes (x= habitat, y = visregFit)) +
-  geom_tile(width = .9) +
-  geom_tile(aes(height = visregUpr - visregLwr, width = .9),
-  alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
-  labs(x = "Habitat", y = "Pox prevalence")
+# predicted_vals %>%
+#   ggplot(aes (x= habitat, y = visregFit)) +
+#   geom_tile(width = .9) +
+#   geom_tile(aes(height = visregUpr - visregLwr, width = .9),
+#   alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
+#   labs(x = "Habitat", y = "Pox prevalence")
 
 
 # Visreg plot with partial residuals on top
@@ -278,7 +279,7 @@ ggplot() +
                               "pasture" = "Pasture"))
 dev.off()
 
-  # Visreg plot with raw data on top (less good)
+# Visreg plot with raw data on top (less good)
 # pdf("output_plots/visreg_habitatxprev_rawdat.pdf", width = 10)
 #   ggplot() +
 #     geom_tile(data = predicted_vals, aes(
@@ -326,22 +327,6 @@ smodd23$coefficients %>%
   select(-9) %>%
   gt() %>%
   gtsave("output_tables/sem_environment_habitat_2023.rtf")
-
-
-
-# understand coefficients better
-test <- filter(captures, species %in% c("SCA", "FOR", "CRA")) %>%
-  mutate(species = factor(species, levels = c("SCA", "FOR", "CRA")))
-lm(mass ~ species, data = test) %>% emmeans (~ species) %>% cld()
-psem(
-  lm(mass ~ species, data = test),
-  data = test
-) %>% summary
-lm(mass ~ species, data = test) %>% summary
-
-mod <- glmer(prop_inf ~ scale_templ2 + scale_precipl2 + habitat + scale_dens + scale_shannons + (1|site),
-      weights = total, data = ddat, family = "binomial")
-emmeans(mod, ~ habitat)
 
 
 
