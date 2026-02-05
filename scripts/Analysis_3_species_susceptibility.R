@@ -83,15 +83,5 @@ emm3 %>%
   scale_y_discrete(labels = c("Camarhynchus psittacula" = "Camarhynchus psittacula*", "Geospiza magnirostris" = "Geospiza magnirostris*"))
 dev.off()
 
-# If one wants to compare species for significant differences in infection status.
-# Update: species x species comparisons are kind of dumb because we have 12 different
-# species.
-# two x standard error
-# twose <- emm3 %>% as.data.frame %>% pull(SE) %>% mean*2
-# cld(emm3, delta = twose, adjust = "none")
-#
-# # Look for significant differences
-#
-# cld(emm3)
 
 
