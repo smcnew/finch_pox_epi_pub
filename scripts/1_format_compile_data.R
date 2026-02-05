@@ -14,7 +14,7 @@ data <- bind_rows(dat_2022, dat_2023)
 
 
 head(data)
-dim(data) #5550 total rows
+dim(data) #5552 total rows
 
 # Process data  -----------------------------------------------------------
 

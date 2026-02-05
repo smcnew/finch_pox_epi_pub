@@ -59,13 +59,9 @@ weekly_climate_summaries <- climate %>%
 captures <- left_join(captures, weekly_climate_summaries)
 
 
-
 # maybe cut this below...
 # add daily temperature and precipitation to DF
 captures <- left_join(captures, climate)
-
-# add monthly averages to captures data frame
-# captures <- left_join(captures, month_temp_summaries)
 
 
 head(captures)
@@ -121,8 +117,8 @@ aggregate(precipitation ~ year, data = climate, sum)
 aggregate(mean_air_temp ~ year, data = climate, mean)
 
 # Check for correlation of climatic variables
-cor(climate$mean_air_temp, climate$humidity)^2
-cor(climate$mean_air_temp, climate$precipitation)^2
-cor(climate$humidity, climate$precipitation)^2
+cor(climate$mean_air_temp, climate$humidity, use = "complete.obs")^2
+cor(climate$mean_air_temp, climate$precipitation, use = "complete.obs")^2
+cor(climate$humidity, climate$precipitation, use = "complete.obs")^2
 
 
