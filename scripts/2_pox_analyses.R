@@ -8,8 +8,9 @@
 library(lme4) # mixed models
 library(lmerTest)
 library(mgcv) # gams
-library(lubridate)
+library(lubridate) #date formatting
 
+# Plotting and formatting packages
 library(ggthemr) # plot params
 library(ggplot2) # visualization
 library(visreg) # model visualization
@@ -19,8 +20,8 @@ library(sjPlot) # for saving tables
 # pacakges for infection comparison between species
 library(nnet) # multinomial model
 library(emmeans) # posthoc comparisons
-# library(multcomp)
-# library(multcompView)
+
+# packages to wrangle
 library(tidyr)
 library(dplyr)
 
@@ -38,9 +39,6 @@ captures <- read.csv("formatted_data/combined_2022_2023_finch_climate.csv") %>%
   mutate(year_week = as.Date(year_week)) %>%
   mutate(year_month = as.Date(year_month)) %>%
   filter(sex != "N") %>% # get rid of nestlings
-  #filter(banded == 1) %>% # keep only banded birds
-  #filter(species != "ZEN") %>% # remove non-passerines
-  #filter(species != "MELA") %>%
   filter(site != "Garrapatero") %>% # remove Garrapatero, only 13 captures
   mutate(pox_iur = factor(pox_iur, levels = c("U", "I", "R"),
                           labels = c("Uninfected", "Infected", "Recovered"))) %>% # relevel pox scale
@@ -69,20 +67,20 @@ droplevels()
 #   mutate(mass_z = scale(mass)) %>%
 #   ungroup()
 
-# Split data set in to highlands (2022) and lowlands (2023-2024)
-# d22 <- captures %>%
-#   filter(year == 2022) %>%
-#   filter(site != "El Barranco") %>% # filter out 8 test birds from lowlands
-#   mutate(type_of_site = relevel(factor(type_of_site), ref = "bosque")) %>%
-#   group_by(species) %>% # exclude species with fewer than 10 records, (G. scandens)
-#   filter(n() >= 10) %>%
-#   ungroup() %>%
-#   droplevels()
-#
-# d23 <- captures %>%
-#   filter(year == 2023 | year == 2024) %>%
-#   filter(zone == "Puerto Ayora" ) %>%
-#   droplevels()
+#Split data set in to highlands (2022) and lowlands (2023-2024)
+d22 <- captures %>%
+  filter(year == 2022) %>%
+  filter(site != "El Barranco") %>% # filter out 8 test birds from lowlands
+  mutate(type_of_site = relevel(factor(type_of_site), ref = "bosque")) %>%
+  group_by(species) %>% # exclude species with fewer than 10 records, (G. scandens)
+  filter(n() >= 10) %>%
+  ungroup() %>%
+  droplevels()
+
+d23 <- captures %>%
+  filter(year == 2023 | year == 2024) %>%
+  filter(zone == "Puerto Ayora" ) %>%
+  droplevels()
 
 
 # Summary stats -----------------------------------------------------------
@@ -212,109 +210,6 @@ pdf("output_plots/covariates_annual.pdf", width = 14, height = 20)
 dev.off()
 
 
-
- #
-# Patterns over time raw data  DEPRECATED -----------------------------------------
-
-# Make a figure showing I and R prevalence over months
-# prev_by_date <- captures %>%
-#   group_by(year_month) %>%
-#   summarize(Infected = mean(pox_iur == "Infected"),
-#             Recovered = mean(pox_iur == "Recovered")) %>%
-#   pivot_longer(cols = c(Infected, Recovered), values_to = "Proportion",
-#                names_to = "Category")
-#
-# prev_22 <- prev_by_date %>%
-#   filter(year(year_month) == 2022) %>%
-#   ggplot(aes(x = year_month, y = Proportion, color = Category, fill = Category)) +
-#   geom_point() + geom_smooth() +
-#
-#   labs(x = "2023")
-#
-#
-# prev_23 <- prev_by_date %>%
-#   filter(year(year_month) != 2022) %>%
-#   ggplot(aes(x = year_month, y = Proportion, color = Category, fill = Category)) +
-#   geom_point() + geom_smooth() +
-#   labs(x = "2023 - 2024")
-#
-# pdf("output_plots/prevalence_by_month_raw_data.pdf", width = 10)
-# prev_22/prev_23
-# dev.off()
-
-# Make a figure showing variation in prevalence by week
-prev_by_date <- captures %>%
-  group_by(year_week) %>%
-  summarize(
-    Infected = mean(pox_iur == "Infected"),
-    Recovered = mean(pox_iur == "Recovered")
-  )  %>%
-  pivot_longer(
-    cols = c(Infected, Recovered),
-    values_to = "Proportion",
-    names_to = "Category"
-  )
-
-# Add columns by hand because date functions are difficult
-prev_by_date$year <- year(prev_by_date$year_week)
-prev_by_date$week <- week(prev_by_date$year_week) # week of year
-
-# Add separate column to make 2024 years continue in sequence from 2023
-prev_by_date <- prev_by_date %>%
-  mutate(plot_week = case_when(year == 2024 ~ week + 52,
-                               year !=2024 ~ week))
-
-# Make a plot for 2022
-
-prev_22 <- prev_by_date %>%
-            filter(year == 2022)
-
-axis_breaksa <- prev_22 %>% distinct(year_week, .keep_all = T) %>% pull(plot_week)
-axis_labelsa <- prev_22 %>% distinct(year_week, .keep_all = T) %>% pull(year_week) %>% format(., "%d-%b")
-
-prev_22p <- prev_22 %>%
-  ggplot(aes(
-    x = week,
-    y = Proportion,
-    color = Category,
-    fill = Category
-  )) +
-  geom_point() + geom_smooth(method = "gam") +
-  labs(x = "2022") +
-  scale_x_continuous(breaks = axis_breaksa[seq(1, length(axis_breaksa), by = 5)], labels = axis_labelsa[seq(1, length(axis_labelsa), by = 5)]) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-# Make a plot for 2023 - 2024
-# First filter the data frame to the right years
-prev_23 <- prev_by_date %>%
-  filter(year != 2022)
-
-# Format axis label vectors
-axis_breaks <- prev_23 %>% distinct(year_week, .keep_all = T) %>% pull(plot_week)
-axis_labels <- prev_23 %>% distinct(year_week, .keep_all = T) %>% pull(year_week) %>% format(., "%d-%b")
-
-# make a plot
-prev_23p <- prev_23 %>%
-  ggplot(aes(
-    x = plot_week,
-    y = Proportion,
-    color = Category,
-    fill = Category
-  )) +
-  geom_point() + geom_smooth(method = "gam") +
-  scale_x_continuous(breaks = axis_breaks[seq(1, length(axis_breaks), by = 5)], labels = axis_labels[seq(1, length(axis_labels), by = 5)]) +
-  labs(x = "2023 - 2024") +
-  theme(  axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-
-# export the plots
-pdf("output_plots/prevalence_by_week_raw_data.pdf", width = 10)
-prev_22p / prev_23p
-dev.off()
-
-
-#
 # Analysis 1: Prevalence over weeks (gam) ------------------------------------------------
 # Weekly GAM
 
@@ -437,7 +332,7 @@ dev.off()
 
 
 #
-# Daily variation in prevalence (gam) -------------------------------------
+# Analysis 1a: Daily variation in prevalence (gam) -------------------------------------
 
 # Daily GAM
 # Add a column that creates date as numeric
@@ -454,7 +349,7 @@ tab_model(gam22d, file = "output_tables/daily_prev_gam_22.html")
 
 
 # Get predicted values using visreg
-pred_obj22d <- visreg(gam22w, scale="response")
+pred_obj22d <- visreg(gam22d, scale="response")
 pred_obj22d$fit  <- pred_obj22d$fit %>% mutate(date = as.Date(num_date, origin = "1970-01-01"))
 
 
@@ -499,70 +394,28 @@ p_daily_gam_22d/p_daily_gam_23d
 dev.off()
 
 
-# Environmental predictors of prevalence DEPRECATED----------------------------------------------
-# New approach- do this analysis with a PSEM (see environment_sems.R)
 
-### good model; total precip and mean temp for the month; no random effect of site_month
-### because causes convergence error, but estimates are the same either way.
-mod1 <- glmer(inf_stat ~  scale(total_precip) + scale(mean_temp) + habitat +
-        (1|species) + (1|site), data = d22, family = "binomial")
-
-summary(mod1)
-visreg(mod1,  "mean_temp", by = "habitat")
-
-glmer(inf_stat ~  scale(total_precip) + scale(mean_temp)  +
-        (1|species) , data = d23, family = "binomial") %>% summary()
-
-glmer(inf_stat ~  scale(total_precip) + scale(mean_temp)  + habitat + bird_dens +
-        (1|species)  + (1|year), data = captures, family = "binomial") %>% summary()
-
-mod2 <- glmer(inf_stat ~  scale(total_precip) + scale(mean_temp)  + habitat +
-        (1|species)  + (1|year), data = captures, family = "binomial")
-visreg(mod2,  "habitat", scale="response")
-
-d22 %>%
-  group_by(habitat) %>%
-  summarize(prevalence = mean(pox_iur == "Infected"),
-            total = n())
-
-boxplot(bird_dens ~ habitat, data = captures)
-dens_model <- lm(bird_dens ~ habitat + day_of_year, data = captures)
-visreg(dens_model, "habitat")
-captures %>%
-  ggplot(aes(x = date, y = bird_dens, color = as.factor(habitat))) +
-  geom_point() +
-  geom_smooth()
-
-
-
-captures %>% filter(is.na(day_of_year))
-plot(bird_dens ~ day_of_year, data = captures)
-
-
-captures %>% filter(is.na(habitat))
-
-
-#
 # Analysis 3: Species differences -----------------------------------------------------
-
-
+table(captures$species)
 
 # Make a multinomial model
 # Remove non passerine species (MELA and ZEN) that had no pox
-mod3 <-
-multinom(pox_iur ~ taxon, data = captures)
+captures2 <- captures %>% filter (species != "MELA") %>% filter (species != "ZEN") %>% filter(species != "GALLARETA") %>% droplevels
+table(captures2$species)
+head(captures2)
+mod3 <- multinom(pox_iur ~ taxon, data = captures2)
 emm3 <- emmeans(mod3, ~ taxon | pox_iur, mode = "prob")
-summary(mod3)
+summary(emm3)
 
 # Evaluate the species model compared to the null
-null_model <- multinom(pox_iur ~ 1, data = captures)
+null_model <- multinom(pox_iur ~ 1, data = captures2)
 
 # Compare with full model
 anova(null_model, mod3, test = "Chisq")
 
 
 # Figure out sample sizes for each species
-table(captures$species)
+table(captures2$species)
 
 # Plot of species prevalence
 # plot(emm3, type = "response") # simple plot
@@ -582,130 +435,3 @@ emm3 %>%
   scale_color_manual(values = c("Recovered" = "#f39c12", "Infected" = "#e74c3c")) +
   scale_y_discrete(labels = c("Camarhynchus psittacula" = "Camarhynchus psittacula*", "Geospiza magnirostris" = "Geospiza magnirostris*"))
 dev.off()
-
-# If one wants to compare species for significant differences in infection status.
-# Update: species x species comparisons are kind of dumb because we have 12 different
-# species.
-# two x standard error
-# twose <- emm3 %>% as.data.frame %>% pull(SE) %>% mean*2
-# cld(emm3, delta = twose, adjust = "none")
-#
-# # Look for significant differences
-#
-# cld(emm3)
-
-#
-# Correlates of bird condition DEPRECATED IN FAVOR OF SEM-------------------------------------
-prev_all %>% arrange(prevalence)
-
-# Mass varies slightly among habitat type, but condition does not
-lmer(mass ~ habitat + scale(mean_temp) +  (1|site) + (1|species), data = captures) %>% summary
-lmer(condition ~ habitat + (1|site) + (1|species), data = captures) %>% summary()
-
-
-# Focus just on variation in one site with high prevalence ()
-# Both mass and condition associated with air temperature
-lm(mass ~ scale(mean_air_temp), data = d23) %>% summary()
-lm(condition ~ scale(mean_air_temp), data = d23) %>% summary()
-
-
-# Write a function to pull beta coefficients and 95% CI from all models
-con_mod <- function(spp, df) {
-  model <- df %>% filter(species == spp) %>%
-            lm(condition_z ~ scale(pox_size_lesion) + scale(mean_air_temp), data = .)
-  beta <- model$coefficients[2]
-  ci_lower <- confint(model)[2,1]
-  ci_upper <- confint(model)[2,2]
-  format_results <- data.frame(species = spp, beta = beta, ci_lower = ci_lower, ci_upper = ci_upper)
-  return(format_results[1,])
-}
-
-results_condition <- data.frame()
-for (i in c("GAMO", "SCA", "CRA", "FOR", "FUL", "PAR")) {
-  tmp <- con_mod(i, df = "captures")
-  results_condition <- rbind(results_condition, tmp)
-}
-
-# Add Latin name to the data frame
-results_condition <- d23 %>%
-  select(species, taxon) %>%
-  distinct() %>%
-  right_join(., results_condition)
-
-pdf("output_plots/effect_size_condition2.pdf", width = 10)
-results_condition %>%
-  ggplot(aes(x = beta, y = taxon)) +
-  geom_tile(aes(width = ci_upper - ci_lower, height = 0.15),
-            alpha = 0.5, show.legend = FALSE, fill ="#1abc9c" ) +
-  geom_point(size = 3, show.legend = FALSE) +
-  labs(x = "Effect of lesion size on condition (β ± 95% CI)", y = "Species")  +
-  theme(axis.text.y = element_text(face = "italic", size = 18),
-        axis.title.x = element_text(size = 18))
-dev.off()
-
-
-# make a more complex model
-captures %>% filter(species == "PAR") %>%
-lmer(mass_z ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|site) + (1|year), data = .)
-
-# %>%
-
-con_mod2 <- function(spp, df) {
-  model <- df %>% filter(species == spp) %>%
-    lmer(condition_z ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|site) + (1|bander_id), data = .)
-  beta <- model@beta[2]
-  ci_lower <- confint(model)[5,1]
-  ci_upper <- confint(model)[5,2]
-  format_results <- data.frame(species = spp, beta = beta, ci_lower = ci_lower, ci_upper = ci_upper)
-  return(format_results[1,])
-}
-
-results_condition <- data.frame()
-for (i in c("FOR", "FUL", "PAR", "CRA", "SCA","GAMO", "PAL", "PSI")) {
-  tmp <- con_mod2(i, captures)
-  results_condition <- rbind(results_condition, tmp)
-}
-
-
-results_condition <- captures %>%
-  select(species, taxon) %>%
-  distinct() %>%
-  right_join(., results_condition)
-
-pdf("output_plots/effect_size_z_condition_all_spp.pdf", width = 10)
-results_condition %>%
-  ggplot(aes(x = beta, y = taxon)) +
-  geom_tile(aes(width = ci_upper - ci_lower, height = 0.15),
-            alpha = 0.5, show.legend = FALSE, fill ="#1abc9c" ) +
-  geom_point(size = 3, show.legend = FALSE) +
-  labs(x = "Effect of lesion size on mass (β ± 95% CI)", y = "Species")  +
-  theme(axis.text.y = element_text(face = "italic", size = 18),
-        axis.title.x = element_text(size = 18))
-dev.off()
-
-
-# Mass ~ pox lesion size (DEPRECATED) --------------------------------------------
-aggregate(elevation ~ habitat, captures, mean)
-
-# with condition
-d23 %>% filter(species == "GAMO") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-d23 %>% filter(species == "CRA") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-d23 %>% filter(species == "SCA") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-d23 %>% filter(species == "PAR") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-d23 %>% filter(species == "FUL") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-d23 %>% filter(species == "FOR") %>%
-  lmer(mass ~ scale(pox_size_lesion) + scale(mean_air_temp) + (1|bander_id) , data = .) %>% summary()
-
-
-
-#
