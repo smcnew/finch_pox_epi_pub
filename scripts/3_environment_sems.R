@@ -6,19 +6,21 @@
 library(piecewiseSEM)
 library(lme4)
 library(lmerTest)
-library(vegan)
+library(vegan) # for calculating Shannon's diversity
 library(mgcv) # for gam
-library(multcompView)
+#library(multcompView)
+library(boot) # for bootstrapping psems
 
 # For plotting
 library(visreg)
 library(ggplot2)
+library(patchwork)
+#devtools::install_github('Mikata-Project/ggthemr')
 library(ggthemr)
 
 # For wrangling
-library(gt)
-library(tidyr)
-library(dplyr)
+library(tidyr) # data manipulation
+library(dplyr) # data manipulation
 
 # Plot params
 ggthemr("flat", layout = "clear", text_size = 20) # clean is no grid lines
@@ -48,6 +50,7 @@ captures <- read.csv("formatted_data/combined_2022_2023_finch_climate.csv") %>%
                                           "Camarhynchus pallidus", "Geospiza fortis",
                                           "Geospiza fuliginosa", "Geospiza scandens",
                                           "Setophaga petechia"))) %>% # taxonomic order
+  mutate(site = factor(site)) %>%
   droplevels()
 
 
@@ -89,14 +92,14 @@ ddat <-  fdat %>%
   as.data.frame %>%
   mutate (total = inf0 + inf1) %>%
   mutate (prop_inf = inf1/total) %>%
-  mutate(habitat_num = as.numeric(habitat))
+  mutate(habitat_num = as.numeric(habitat)) %>%
+  mutate(numeric_date = as.numeric(date))
 
-# variation in shannon's among habitat  -----------------------------------
+ddat22 <- filter(ddat, year == 2022, habitat !="arid") %>% droplevels()
+ddat23 <- filter(ddat, year != 2022, habitat == "arid") %>% droplevels()
+#
+# Variation in Shannon's Diversity among habitats  -----------------------------------
 
-head(ddat)
-ddat <- ddat %>% mutate(numeric_date = as.numeric(date))
-ddat22 <- ddat[ddat$year==2022,]
-ddat23 <- ddat[ddat$year!=2022,]
 
 # Models of habitat and date
 diversity_habitat <- lmer(shannon_dpd ~ habitat + (1|site), data = ddat)
@@ -120,12 +123,8 @@ pdf("output_plots/diversity_habitats_time.pdf", height = 10, width = 10)
 d1/(d2 + d3)
 dev.off()
 
-# check VIF elev habitat --------------------------------------------------
-
-#r2 <- summary(lm(elevation ~ habitat, data = ddat))$r.squared
-#vif_x1 <- 1 / (1 - r2)  # highly correlated
-
-# PSEMs for pox prevalence ---------------------------------------------------
+#
+# Identify best fit time lag for environmental variables ---------------------------------------------------
 
 # Identify best time lag for precipitation
 lag0 <- psem(
@@ -187,57 +186,94 @@ modd <- psem(
 smodd <- summary(modd)
 smodd
 
+# Format output tables for habitat model
+smodd$coefficients %>%
+  select(-9) %>%
+  mutate(across(.cols = c(Response, Predictor), .fns =
+                  ~recode(.x,
+                          prop_inf = "Pox prevalence",
+                          scale_dens = "Host abundance",
+                          scale_shannons = "Host diversity",
+                          scale_templ2 = "Temperature",
+                          scale_elev = "Elevation",
+                          scale_precipl2 = "Precipitation",
+                          scale_humidityl2 = "Humidity"))) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  write.csv("output_tables/sem_environment_habitat_factor.csv", row.names = FALSE)
+
 # Elevation model
 modde <- psem(
-  glmer(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons + scale_elev + (1|site),
-        weights = total, data = ddat, family = "binomial"),
+  glmer(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons + scale_elev + (1|site), weights = total,
+        data = ddat, family = "binomial"),
   lmer(scale_dens ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_elev +  (1|site) , data = ddat),
   lmer(scale_shannons ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_elev + (1|site) , data = ddat), # take out habitat to improve model convergence.
   data = ddat)
 smodde <- summary(modde)
+smodde
 
 
+# Bootstrap models for 95CIs for elevation --------------------------------------
 
-# Format output tables for habitat model
-smodd$coefficients %>%
-  select(-9) %>%
-  gt() %>%
-  gtsave("output_tables/sem_environment_habitat_factor.rtf")
 
+boot_elevation_sem <- function(data, indices) {
+  d <- data[indices, , drop = FALSE]
+  modde <- psem(
+    glmer(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons + scale_elev + (1|site), weights = total,
+          data = d, family = "binomial",
+          control = glmerControl(
+            optimizer = "bobyqa",
+            optCtrl = list(maxfun = 200000))),
+    lmer(scale_dens ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_elev + (1|site), data = d),
+    lmer(scale_shannons ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_elev + (1|site), data = d), # take out habitat to improve model convergence.
+    data = d)
+coefficients <- modde %>% summary %>% .$coefficients %>% .$Std.Estimate
+return(coefficients)
+}
+
+
+full_elev_model_boot <- boot(data = ddat, statistic = boot_elevation_sem, R = 2000, strata = ddat$site)
+
+
+# format boot results
+boot_results <- data.frame(
+  boot_std_estimate = full_elev_model_boot$t0,
+  boot_bias = summary(full_elev_model_boot)$bootBias,
+  boot_mean = apply(full_elev_model_boot$t, 2, function(x) mean(x)),
+  Lower_CI = apply(full_elev_model_boot$t, 2, function(x) quantile(x, 0.025)),
+  Upper_CI = apply(full_elev_model_boot$t, 2, function(x) quantile(x, 0.975))
+)
+
+
+#Some sanity checks
+# test <- smodde$coefficients %>%
+#   select(-9) %>%
+#   cbind(boot_results)
+#
+# test$Std.Estimate == test$boot_std_estimate
+# test$Upper_CI > test$Std.Estimate
+# test$Lower_CI < test$Std.Estimate
 
 # Format output tables for elevation model
 smodde$coefficients %>%
 select(-9) %>%
-  gt() %>%
-  gtsave("output_tables/sem_environment_elevation.rtf")
-
-plot(modde)
-
-# # Create a model with habitat coded as a numerical variable to get standardized
-# # estimates for beta coefficients of the other variables.
-#
-# modd2 <- psem(
-#   glmer(prop_inf ~ habitat_num +scale_templ2 + scale_precipl2 + scale_dens + scale_shannons + (1|site),
-#         weights = total, data = ddat, family = "binomial"),
-#   lmer(scale_dens ~ scale_templ2 + scale_precipl2 + habitat_num + (1|site), data = ddat), # take out random effect bc it causes singularity error
-#   lmer(scale_shannons ~ scale_templ2 + scale_precipl2 + scale_dens +habitat_num+ (1|site), data = ddat),
-#   data = ddat)
-# smodd2 <- summary(modd2)
-# smodd2
-#
-#
-# # Save coefficients
-# smodd2$coefficients %>%
-#   select(-9) %>%
-#   gt %>%
-#   gtsave("output_tables/sem_environment_habitat_num.rtf")
-#
-#
-# # Note, psem plots won't write to a pdf IDK why.
-# plot(modd2)
+  cbind(boot_results) %>%
+  select(-boot_std_estimate, -boot_mean, -boot_bias) %>%
+  mutate(across(.cols = c(Response, Predictor), .fns =
+                  ~recode(.x,
+                          prop_inf = "Pox prevalence",
+                          scale_dens = "Host abundance",
+                          scale_shannons = "Host diversity",
+                          scale_templ2 = "Temperature",
+                          scale_elev = "Elevation",
+                          scale_precipl2 = "Precipitation",
+                          scale_humidityl2 = "Humidity"))) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  write.csv("output_tables/sem_environment_elevation.csv", row.names = F)
 
 
 
+
+#
 # Visualizations -----------------------------------------------------------------
 # Use visreg to visualize differences among habitats
 
@@ -246,87 +282,140 @@ prev_model <- glmer(cbind(inf1, inf0) ~ scale_templ2 + scale_precipl2 + scale_hu
 
 summary(prev_model)$coefficients
 
-str(summary(prev_model))
+
 visreg(prev_model, "habitat", scale = "response")
-predicted_vals <- visreg(prev_model,"habitat", scale = "response")$fit
-predicted_resids <- visreg(prev_model,"habitat", scale = "response")$res
-
-# base visreg plot
-#visreg(prev_model,"habitat", scale = "response", partial = TRUE, gg= T) +
-#  labs(y = "Prevalence")
-
-
-# Visreg plot just means and confidence bands
-# predicted_vals %>%
-#   ggplot(aes (x= habitat, y = visregFit)) +
-#   geom_tile(width = .9) +
-#   geom_tile(aes(height = visregUpr - visregLwr, width = .9),
-#   alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
-#   labs(x = "Habitat", y = "Pox prevalence")
+predicted_vals <- visreg(prev_model,"habitat", scale = "response", plot = FALSE)$fit
+predicted_resids <- visreg(prev_model,"habitat", scale = "response", plot = FALSE)$res
 
 
 # Visreg plot with partial residuals on top
 pdf("output_plots/visreg_habitatxprev_part_resids.pdf", width = 10)
 ggplot() +
   geom_tile(data = predicted_vals, aes(
-    x= habitat, y = visregFit), width = .9, height = .005) +
+    x= habitat, y = visreg_fit), width = .9, height = .005) +
   geom_tile(data = predicted_vals, aes(
-    x= habitat, y = visregFit, height = visregUpr - visregLwr, width = .9), alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
-  geom_jitter(data = predicted_resids, aes(x = habitat, y = visregRes), width = .1) +
+    x= habitat, y = visreg_fit, height = visreg_upr - visreg_lwr, width = .9), alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
+  geom_jitter(data = predicted_resids, aes(x = habitat, y = visreg_res), width = .1) +
   labs(x = "Habitat", y = "Pox Prevalence") +
   scale_x_discrete(labels = c("natural" = "Forest", "arid" = "Coast/Urban",
                               "coffee" = "Coffee", "fruit_vegetable" = "Fruit/Veg",
                               "pasture" = "Pasture"))
 dev.off()
 
-# Visreg plot with raw data on top (less good)
-# pdf("output_plots/visreg_habitatxprev_rawdat.pdf", width = 10)
-#   ggplot() +
-#     geom_tile(data = predicted_vals, aes(
-#       x= habitat, y = visregFit), width = .9, height = .005) +
-#     geom_tile(data = predicted_vals, aes(
-#       x= habitat, y = visregFit, height = visregUpr - visregLwr, width = .9), alpha = 0.5, show.legend = FALSE, fill = "#34495e") +
-#      geom_jitter(data = ddat, aes(x = habitat, y = prop_inf), width = .1) +
-#     labs(x = "Habitat", y = "Pox Prevalence") +
-#     scale_x_discrete(labels = c("natural" = "Forest", "arid" = "Coast/Urban",
-#                                 "coffee" = "Coffee", "fruit_vegetable" = "Fruit/Veg",
-#                                 "pasture" = "Pasture"))
-# dev.off()
-#
+
 
 # PSEMs of divided datasets -----------------------------------------------
 #2022
-ddat22 <- filter(ddat, year == 2022, habitat !="arid") %>% droplevels()
+
 modd22 <- psem(
-  glmer(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons + (1|site),
-        weights = total, data = ddat22, family = "binomial"),
-  lmer(scale_dens ~ scale_templ2 + scale_humidityl2 + scale_precipl2 +  (1|site) , data = ddat22),
-  lmer(scale_shannons ~ scale_templ2 + scale_humidityl2 + scale_precipl2 + scale_dens + (1|site) , data = ddat22),
+  glmer(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons + scale_elev + (1|site), weights = total,
+        data = ddat22, family = "binomial",
+        control = glmerControl(
+          optimizer = "bobyqa",
+          optCtrl = list(maxfun = 200000))),
+  lmer(scale_dens ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_elev + (1|site), data = ddat22),
+  lmer(scale_shannons ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_elev + (1|site), data = ddat22), # take out habitat to improve model convergence.
   data = ddat22)
 smodd22 <- summary(modd22)
 smodd22
 
+# Boot results
+
+full_elev_model_boot22 <- boot(data = ddat22, statistic = boot_elevation_sem, R = 2000, strata = ddat22$site)
+
+boot_results22 <- data.frame(
+  boot_std_estimate = full_elev_model_boot22$t0,
+  boot_bias = summary(full_elev_model_boot22)$bootBias,
+  boot_mean = apply(full_elev_model_boot22$t, 2, function(x) mean(x)),
+  Lower_CI = apply(full_elev_model_boot22$t, 2, function(x) quantile(x, 0.025)),
+  Upper_CI = apply(full_elev_model_boot22$t, 2, function(x) quantile(x, 0.975))
+)
+
+# Do some sanity checks
+
+# temp <- smodd22$coefficients %>%
+#   select(-9) %>%
+#   cbind(boot_results22)
+# temp$Std.Estimate == temp$boot_std_estimate
+# temp$Std.Estimate > temp$Lower_CI
+# temp$Std.Estimate < temp$Upper_CI
+
+# format results for export
 smodd22$coefficients %>%
   select(-9) %>%
-  gt() %>%
-  gtsave("output_tables/sem_environment_habitat_2022.rtf")
+  cbind(boot_results22) %>%
+  select(-boot_std_estimate, -boot_mean, -boot_bias) %>%
+  mutate(across(.cols = c(Response, Predictor), .fns =
+                  ~recode(.x,
+                          prop_inf = "Pox prevalence",
+                          scale_dens = "Host abundance",
+                          scale_shannons = "Host diversity",
+                          scale_templ2 = "Temperature",
+                          scale_elev = "Elevation",
+                          scale_precipl2 = "Precipitation",
+                          scale_humidityl2 = "Humidity"))) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  write.csv("output_tables/sem_environment_elevation_2022.csv", row.names = F)
 
 
 # 2023
-ddat23 <- filter(ddat, year != 2022, habitat == "arid")
+
 modd23 <- psem(
-  glm(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons ,
+   glm(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons ,
         weights = total, data = ddat23, family = "binomial"),
   lm(scale_dens ~ scale_templ2 + scale_humidityl2 + scale_precipl2 , data = ddat23),
   lm(scale_shannons ~ scale_templ2 + scale_humidityl2 + scale_precipl2 + scale_dens, data = ddat23),
   data = ddat23)
 smodd23 <- summary(modd23)
 
+# Boot results, make a new function without random effects
 
+boot_elevation_sem23 <- function(data, indices) {
+d <- data[indices, , drop = FALSE]
+modd23 <- psem(
+  glm(prop_inf ~ scale_templ2 + scale_precipl2 + scale_humidityl2 + scale_dens + scale_shannons ,
+      weights = total, data = d, family = "binomial"),
+  lm(scale_dens ~ scale_templ2 + scale_humidityl2 + scale_precipl2 , data = d),
+  lm(scale_shannons ~ scale_templ2 + scale_humidityl2 + scale_precipl2 + scale_dens, data = d),
+  data = d)
+coefficients <- modd23 %>% summary %>% .$coefficients %>% .$Std.Estimate
+return(coefficients)
+}
+
+full_elev_model_boot23 <- boot(data = ddat23, statistic = boot_elevation_sem23, R = 2000)
+
+
+boot_results23 <- data.frame(
+  boot_std_estimate = full_elev_model_boot23$t0,
+  boot_bias = summary(full_elev_model_boot23)$bootBias,
+  boot_mean = apply(full_elev_model_boot23$t, 2, function(x) mean(x)),
+  Lower_CI = apply(full_elev_model_boot23$t, 2, function(x) quantile(x, 0.025)),
+  Upper_CI = apply(full_elev_model_boot23$t, 2, function(x) quantile(x, 0.975))
+)
+
+# # Some sanity checks
+# temp <- smodd23$coefficients %>%
+#   select(-9) %>%
+#   cbind(boot_results23)
+# temp$Std.Estimate == temp$boot_std_estimate
+# temp$Std.Estimate > temp$Lower_CI
+# temp$Std.Estimate < temp$Upper_CI
+
+# Format results for export
 smodd23$coefficients %>%
   select(-9) %>%
-  gt() %>%
-  gtsave("output_tables/sem_environment_habitat_2023.rtf")
+  cbind(boot_results23) %>%
+  select(-boot_std_estimate, -boot_mean, -boot_bias) %>%
+  mutate(across(.cols = c(Response, Predictor), .fns =
+                  ~recode(.x,
+                          prop_inf = "Pox prevalence",
+                          scale_dens = "Host abundance",
+                          scale_shannons = "Host diversity",
+                          scale_templ2 = "Temperature",
+                          scale_precipl2 = "Precipitation",
+                          scale_humidityl2 = "Humidity"))) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  write.csv("output_tables/sem_environment_elevation2023.csv", row.names = F)
 
 
 

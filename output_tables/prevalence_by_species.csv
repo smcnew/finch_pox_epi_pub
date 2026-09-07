@@ -1,4 +1,5 @@
 "taxon","prevalence","total","I","U","R"
+"Neocrex erythrops",0,4,0,4,0
 "Zenaida galapagoensis",0,5,0,5,0
 "Coccyzus melacoryphus",0,19,0,19,0
 "Myiarchus magnirostris",0.0316455696202532,158,5,152,1
@@ -13,4 +14,3 @@
 "Geospiza fuliginosa",0.105038428693424,2342,246,1555,541
 "Geospiza scandens",0.0748299319727891,147,11,95,41
 "Setophaga petechia",0.0191938579654511,521,10,506,5
-NA,0,4,0,4,0

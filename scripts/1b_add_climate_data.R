@@ -71,45 +71,6 @@ head(captures)
 write.csv(captures, "formatted_data/combined_2022_2023_finch_climate.csv", row.names = FALSE)
 
 
-# Deprecated
-# # aggregate average temperature, humidity, and total preciptation for each month
-# month_temp_summaries <- climate %>%
-#   group_by(year_month) %>%
-#   summarize(mean_temp = mean(mean_air_temp),
-#             mean_humid = mean(humidity),
-#             total_precip = sum(precipitation), .groups = "drop") %>%
-#   mutate(precip_month_lag = lag(total_precip, 1)) %>%
-#   as.data.frame()
-
-
-
-
-
-# First, aggregate average temperature, humidity, and total precip for each week
-# Then, create 2-8 week lags for temp and precipitation
-# weekly_climate_summaries <- climate %>%
-#   group_by(year_week) %>%
-#   summarize(week_temp = mean(mean_air_temp),
-#             week_humidity = mean(humidity),
-#             week_precip = sum(precipitation), .groups = "drop") %>%
-#   mutate(templ2 = lag(week_temp, 2),
-#          templ4 = lag(week_temp, 4),
-#          templ6 = lag(week_temp, 6),
-#          templ8 = lag(week_temp, 8),
-#          templ10 = lag(week_temp, 10),
-#          humidityl2 = lag(week_humidity, 2),
-#          humidityl4 = lag(week_humidity, 4),
-#          humidityl6 = lag(week_humidity, 6),
-#          humidityl8 = lag(week_humidity, 8),
-#          humidityl10 = lag(week_humidity, 10),
-#          precipl2 = lag(week_precip, 2),
-#          precipl4 = lag(week_precip, 4),
-#          precipl6 = lag(week_precip, 6),
-#          precipl8 = lag(week_precip, 8),
-#          precipl10 = lag(week_precip, 10)) %>%
-#   as.data.frame()
-
-
 
 # Summary statistics of climate
 

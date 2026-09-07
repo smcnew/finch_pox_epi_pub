@@ -17,9 +17,6 @@ library(visreg) # model visualization
 library(patchwork) # plotting
 library(sjPlot) # for saving tables
 
-# pacakges for infection comparison between species
-library(nnet) # multinomial model
-library(emmeans) # posthoc comparisons
 
 # packages to wrangle
 library(tidyr)
@@ -47,7 +44,7 @@ captures <- read.csv("formatted_data/combined_2022_2023_finch_climate.csv") %>%
   mutate(pox_size_lesion = case_when(is.na(pox_size_lesion) ~ 0, TRUE ~ pox_size_lesion)) %>% # replace NA with 0 for lesion size
   mutate(type_of_site = relevel(factor(type_of_site), ref = "bosque")) %>% # relevel type of site
   mutate(habitat = relevel(factor(habitat), ref = "natural")) %>% # relevel habitat
-  mutate(taxon = factor(taxon, levels = c("Zenaida galapagoensis", "Coccyzus melacoryphus",
+  mutate(taxon = factor(taxon, levels = c("Neocrex erythrops", "Zenaida galapagoensis", "Coccyzus melacoryphus",
                                           "Myiarchus magnirostris", "Mimus parvulus",
                                           "Certhidea olivacea", "Platyspiza crassirostris",
                                           "Camarhynchus parvulus", "Camarhynchus psittacula",
@@ -90,6 +87,7 @@ captures %>% filter (year == 2022) %>% dplyr::select(site, habitat) %>% unique %
 # How many captures in each year
 captures %>% group_by(year) %>% tally
 dim(captures)
+captures %>% filter(species == "FUL") %>% nrow
 
 # How many species each year
 captures %>% group_by(year) %>% summarize(n_spp = length(unique(species)))
@@ -126,6 +124,9 @@ site_info <-
 site_info <- left_join(site_info, visits_per_year) %>%
               left_join(., prevalence)
 
+# correlation between habitat and elevation for revision
+aov(elevation ~ habitat, data = site_info) %>% summary
+
 # Write out table for supplement
 write.csv(site_info, "output_tables/Table_S1.csv", row.names = F)
 
@@ -148,8 +149,13 @@ write.csv(prev_all, "output_tables/prevalence_by_species.csv", row.names = F)
 
 
 # correlation between pox scale and lesion size
-aov(pox_size_lesion ~ pox_scale, data = captures) %>% summary
+lm(pox_size_lesion ~ pox_scale, data = captures) %>% summary
 
+# recapture rate
+
+table(captures$recaptured)
+dim(captures)
+492/5468
 
 # Environmental patterns over the course of the year (PLOTS)  -----------------------------------
 
@@ -228,28 +234,36 @@ prev_by_week <- captures %>%
 
 # Make objects for 2022 and 2023 separately so visreg works
 pbw22 <- prev_by_week %>% filter(year == 2022)
-pbw23 <- prev_by_week %>% filter(year != 2022)
+pbw23 <- prev_by_week %>% filter(year != 2022) #%>% filter(site == "Barranco")
+
 
 # Make some gams
 # 2022 model infected
 gam22i <-   gam(
-  cbind(inf, uninf) ~ s(num_week),
+  cbind(inf, uninf) ~
+    s(num_week),
   data = pbw22,
-  family = binomial(link = "logit")
+  family = binomial(link = "logit"),
+  method = "REML"
 )
+summary(gam22i)
+gam.check(gam22i)
+
 
 # 2023-2024 model infected
 gam23i <-   gam(
   cbind(inf, uninf) ~ s(num_week),
   data = pbw23,
-  family = binomial(link = "logit")
+  family = binomial(link = "logit"),
+  method = "REML"
 )
 
 # 2022 model recovered
 gam22r <-   gam(
   cbind(rec, unrec) ~ s(num_week),
   data = pbw22,
-  family = binomial(link = "logit")
+  family = binomial(link = "logit"),
+  method = "REML"
 )
 
 
@@ -257,7 +271,8 @@ gam22r <-   gam(
 gam23r <-   gam(
   cbind(rec, unrec) ~ s(num_week),
   data = pbw23,
-  family = binomial(link = "logit")
+  family = binomial(link = "logit"),
+  method = "REML"
 )
 
 
@@ -265,18 +280,35 @@ summary(gam22i)
 summary(gam23i)
 summary(gam22r)
 summary(gam23r)
-# Make plots
+
+# Format tables for export
+
+test<- data.frame(model = 1:4, effective_DF = NA, reference_DF = NA, Chi_sq = NA, p_value = NA, R2 = NA, Dev_explained = NA)
+modlist <- c("gam22i", "gam22r", "gam23i", "gam23r")
+for (i in 1:4) {
+  test$model[i] <- modlist[i]
+  model <- get(modlist[i])
+  test[i,2:5] <- summary(model)$s.table
+  test$Dev_explained[i] <-summary(model)$dev.expl
+  test$R2[i] <-summary(model)$r.sq
+}
+
+# Write out model results
+
+test %>%  mutate(across(where(is.numeric), ~ signif(.x, 4))) %>%
+tab_df(., file = "output_tables/gam.html")
+
 # Get predicted values from visreg and add x axis date column
-pred_obj22i <- visreg(gam22i, scale = "response") %>% .$fit %>%
+pred_obj22i <- visreg(gam22i, "num_week", scale = "response") %>% .$fit %>%
   mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
-  mutate(Status = "Infected")
-pred_obj22r <- visreg(gam22r, scale = "response") %>% .$fit %>%
+  mutate(Status = "Symptomatic")
+pred_obj22r <- visreg(gam22r, "num_week", scale = "response") %>% .$fit %>%
   mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
   mutate(Status = "Recovered")
-pred_obj23i <- visreg(gam23i, scale = "response") %>% .$fit %>%
+pred_obj23i <- visreg(gam23i, "num_week", scale = "response") %>% .$fit %>%
   mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
-  mutate(Status = "Infected")
-pred_obj23r <- visreg(gam23r, scale = "response") %>% .$fit %>%
+  mutate(Status = "Symptomatic")
+pred_obj23r <- visreg(gam23r, "num_week", scale = "response") %>% .$fit %>%
   mutate(date = as.Date(num_week, origin = "1970-01-01"))%>%
   mutate(Status = "Recovered")
 
@@ -300,8 +332,8 @@ prev_22p <- ggplot() +
   ) +
   labs(x = "2022", y = "Proportion of captures") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_manual(values = c("Infected" = "#e74c3c", "Recovered" = "#f39c12")) +
-  scale_color_manual(values = c("Infected" = "#e74c3c", "Recovered" = "#f39c12"))
+  scale_fill_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12")) +
+  scale_color_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12"))
 
 prev_22p
 # Plot for 2023 - 2024
@@ -322,16 +354,13 @@ prev_23p <- ggplot() +
   ) +
   labs(x = "2023 – 2024", y = "Proportion of captures") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_manual(values = c("Infected" = "#e74c3c", "Recovered" = "#f39c12")) +
-  scale_color_manual(values = c("Infected" = "#e74c3c", "Recovered" = "#f39c12"))
+  scale_fill_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12")) +
+  scale_color_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12"))
 
 
 pdf("output_plots/prevalence_by_week_modeled_data.pdf", width = 12, height = 12)
 prev_22p / prev_23p
 dev.off()
-
-
-#
 # Analysis 1a: Daily variation in prevalence (gam) -------------------------------------
 
 # Daily GAM
@@ -343,9 +372,9 @@ d23$num_date <- as.numeric(d23$date)
 gam22d <- gam(inf_stat ~ s(num_date),
              data = d22,
              family = binomial(link = "logit"))
-
-# Save model summary for supplement
-tab_model(gam22d, file = "output_tables/daily_prev_gam_22.html")
+summary(gam22d)
+# Save model summary for supplement; deprecated, tab_model isn't great for GAMs.
+# tab_model(gam22d, file = "output_tables/daily_prev_gam_22.html")
 
 
 # Get predicted values using visreg
@@ -359,7 +388,7 @@ pred_obj22d$fit %>%
 ggplot(aes(x = date, y = visregFit)) +
   geom_ribbon(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.4) +
   geom_line(linewidth = 1.2) +
-  labs(x = "Date (2022)", y = "Infection prevalence") +
+  labs(x = "Date (2022)", y = "Prevalence") +
   scale_x_date(
     date_labels = "%d-%b",
     date_breaks = "4 week"
@@ -370,7 +399,7 @@ ggplot(aes(x = date, y = visregFit)) +
 gam23d <- gam(inf_stat ~ s(num_date),
              data = d23,
              family = binomial(link = "logit"))
-tab_model(gam23d, file = "output_tables/daily_prev_gam_23.html")
+#tab_model(gam23d, file = "output_tables/daily_prev_gam_23.html")
 
 # Get model predicted values
 pred_obj23d <- visreg(gam23d, scale="response")
@@ -381,7 +410,7 @@ p_daily_gam_23d <- pred_obj23d$fit %>%
   ggplot(aes(x = date, y = visregFit)) +
   geom_ribbon(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.4) +
   geom_line(linewidth = 1.2) +
-  labs(x = "Date (2023-2024)", y = "Infection prevalence") +
+  labs(x = "Date (2023-2024)", y = "Prevalence") +
   scale_x_date(
     date_labels = "%d-%b",
     date_breaks = "4 week"
@@ -394,4 +423,139 @@ p_daily_gam_22d/p_daily_gam_23d
 dev.off()
 
 
+# Save model results
 
+test2<- data.frame(model = 1:2, effective_DF = NA, reference_DF = NA, Chi_sq = NA, p_value = NA, R2 = NA, Dev_explained = NA)
+modlist2 <- c("gam22d", "gam23d")
+for (i in 1:2) {
+  test2$model[i] <- modlist2[i]
+  model <- get(modlist2[i])
+  test2[i,2:5] <- summary(model)$s.table
+  test2$Dev_explained[i] <-summary(model)$dev.expl
+  test2$R2[i] <-summary(model)$r.sq
+}
+
+test2 %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 4))) %>%
+  tab_df(., file = "output_tables/gam_daily.html", digits = 4)
+
+test %>% rbind(test2) %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 4))) %>%
+  tab_df(., file = "output_tables/gams_all.html", digits = 4)
+
+#
+# Revision: GAM by cyclical week ------------------------------------------
+
+# add a column that codes week 1-52
+pbw22 <- pbw22 %>%
+  mutate(week52 = week(as.Date(num_week, origin = "1970-01-01")))
+
+pbw23 <- pbw23 %>%
+  mutate(week52 = week(as.Date(num_week, origin = "1970-01-01")))
+
+# 2022 model infected
+gam22i <-   gam(
+  cbind(inf, uninf) ~ s(week52, bs = "cc", k = 15),
+  family = binomial(link = "logit"),
+  method = "REML",
+  knots = list(week52 = c(1, 53)),
+  data = pbw22
+)
+
+# 2023-2024 model infected
+gam23i <-   gam(
+  cbind(inf, uninf) ~ s(week52, bs = "cc", k = 15),
+  family = binomial(link = "logit"),
+  method = "REML",
+  knots = list(week52 = c(1, 53)),
+  data = pbw23
+)
+
+
+# 2022 model recovered
+gam22r <-   gam(
+  cbind(rec, unrec) ~ s(week52, bs = "cc", k = 15),
+  family = binomial(link = "logit"),
+  method = "REML",
+  knots = list(week52 = c(1, 53)),
+  data = pbw22
+)
+
+
+# 2023-2024 model recovered
+gam23r <-   gam(
+  cbind(rec, unrec) ~ s(week52, bs = "cc", k = 15),
+  family = binomial(link = "logit"),
+  method = "REML",
+  knots = list(week52 = c(1, 53)),
+  data = pbw23
+)
+
+
+summary(gam22i)
+summary(gam23i)
+summary(gam22r)
+summary(gam23r)
+
+gam.check(gam22i)
+gam.check(gam22r)
+gam.check(gam23i)
+gam.check(gam23r)
+
+
+
+# Get predicted values from visreg and add x axis date column
+pred_obj22i <- visreg(gam22i, scale = "response") %>% .$fit %>%
+ # mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
+  mutate(Status = "Symptomatic")
+pred_obj22r <- visreg(gam22r, scale = "response") %>% .$fit %>%
+  #mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
+  mutate(Status = "Recovered")
+pred_obj23i <- visreg(gam23i, scale = "response") %>% .$fit %>%
+  #mutate(date = as.Date(num_week, origin = "1970-01-01")) %>%
+  mutate(Status = "Symptomatic")
+pred_obj23r <- visreg(gam23r, scale = "response") %>% .$fit %>%
+  #mutate(date = as.Date(num_week, origin = "1970-01-01"))%>%
+  mutate(Status = "Recovered")
+
+
+
+# Plot for 2022
+prev_22p <- ggplot() +
+  geom_ribbon(data = pred_obj22i,
+              aes(x = week52, ymin = visregLwr, ymax = visregUpr, fill = Status),
+              alpha = 0.4) +
+  geom_line(data = pred_obj22i, aes(x = week52, y = visregFit, color = Status), linewidth = 1.2) +
+  geom_ribbon(data = pred_obj22r,
+              aes(x = week52, ymin = visregLwr, ymax = visregUpr, fill = Status),
+              alpha = 0.4) +
+  geom_line(data = pred_obj22r, aes(x = week52, y = visregFit, color = Status), linewidth = 1.2) +
+  geom_point(data = pbw22, aes(x = week52, y = prev_i), color = "#e74c3c") +
+  geom_point(data = pbw22, aes(x = week52, y = prev_r), color = "#f39c12") +
+  labs(x = "Week", y = "Proportion of captures") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12")) +
+  scale_color_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12"))
+
+prev_22p
+# Plot for 2023 - 2024
+prev_23p <- ggplot() +
+  geom_ribbon(data = pred_obj23i,
+              aes(x = week52, ymin = visregLwr, ymax = visregUpr, fill = Status),
+              alpha = 0.4) +
+  geom_line(data = pred_obj23i, aes(x = week52, y = visregFit, color = Status), linewidth = 1.2) +
+  geom_ribbon(data = pred_obj23r,
+              aes(x = week52, ymin = visregLwr, ymax = visregUpr, fill = Status),
+              alpha = 0.4) +
+  geom_line(data = pred_obj23r, aes(x = week52, y = visregFit, color = Status), linewidth = 1.2) +
+  geom_point(data = pbw23, aes(x = week52, y = prev_i), color = "#e74c3c") +
+  geom_point(data = pbw23, aes(x = week52, y = prev_r), color = "#f39c12") +
+  labs(x = "Week", y = "Proportion of captures") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12")) +
+  scale_color_manual(values = c("Symptomatic" = "#e74c3c", "Recovered" = "#f39c12"))
+
+
+pdf("output_plots/prevalence_by_week_modeled_data_week52.pdf", width = 12, height = 12)
+prev_22p / prev_23p
+dev.off()

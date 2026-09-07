@@ -1,0 +1,16 @@
+"Response","Predictor","Estimate","Std.Error","DF","Crit.Value","P.Value","Std.Estimate","Lower_CI","Upper_CI"
+"Pox prevalence","Temperature",0.614,0.088,1075,6.959,0,0.29,0.196,0.374
+"Pox prevalence","Precipitation",-0.012,0.05,1075,-0.242,0.809,-0.007,-0.076,0.056
+"Pox prevalence","Humidity",0.065,0.047,1075,1.388,0.165,0.034,-0.023,0.087
+"Pox prevalence","Host abundance",0.023,0.052,1075,0.446,0.656,0.01,-0.041,0.06
+"Pox prevalence","Host diversity",-0.11,0.057,1075,-1.936,0.053,-0.053,-0.119,0.012
+"Pox prevalence","Elevation",-0.405,0.186,1075,-2.172,0.03,-0.205,-0.307,-0.124
+"Host abundance","Temperature",-0.284,0.035,1069.136,-8.004,0,-0.306,-0.349,-0.272
+"Host abundance","Precipitation",-0.055,0.023,1069.724,-2.41,0.016,-0.073,-0.102,-0.046
+"Host abundance","Humidity",-0.043,0.024,1062.27,-1.772,0.077,-0.051,-0.114,0.006
+"Host abundance","Elevation",-0.146,0.104,14.602,-1.409,0.18,-0.169,-0.205,-0.133
+"Host diversity","Temperature",-0.372,0.038,1064.074,-9.706,0,-0.364,-0.429,-0.291
+"Host diversity","Precipitation",0.054,0.024,1061.711,2.259,0.024,0.065,-0.008,0.126
+"Host diversity","Humidity",0.046,0.025,1056.657,1.796,0.073,0.049,-0.012,0.11
+"Host diversity","Host abundance",-0.13,0.032,1062.929,-4.059,0,-0.118,-0.166,-0.068
+"Host diversity","Elevation",0.05,0.178,15.7,0.282,0.781,0.053,-0.035,0.147

@@ -1,6 +1,6 @@
 # Script to compile 2022 and 2023 data and clean it
 # Sabrina McNew
-# Updated May 2025
+# Updated August 2026
 library(tidyr)
 library(vegan)
 library(dplyr)
@@ -55,6 +55,13 @@ data <- data %>%
   as.data.frame()
 
 # Add additional site information --------------------------------------------
+
+# add missing elevation info
+
+data <- data %>%
+  mutate(elevation = case_when(site == "Barranco" ~ 18,
+                               site == "Reina Oleas" ~ 260,
+                               TRUE ~ elevation))
 
 # Shannon's diversity per site
 # Create a species x column data frame

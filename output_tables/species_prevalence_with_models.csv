@@ -1,0 +1,16 @@
+"Latin_name","Observed_prevalence","Captures","Symptomatic","Unaffected","Recovered","Posterior_symptomatic","Posterior_recovered"
+"Neocrex erythrops",0,4,0,4,0,NA,NA
+"Zenaida galapagoensis",0,5,0,5,0,NA,NA
+"Coccyzus melacoryphus",0,19,0,19,0,NA,NA
+"Myiarchus magnirostris",0.032,158,5,152,1,"0.035 [0.012—0.084]","0.007 [0—0.037]"
+"Mimus parvulus",0.199,186,37,131,18,"0.099 [0.057—0.163]","0.135 [0.076—0.228]"
+"Certhidea olivacea",0.008,124,1,111,12,"0.015 [0.001—0.091]","0.192 [0.094—0.347]"
+"Platyspiza crassirostris",0.054,352,19,208,125,"0.023 [0.012—0.044]","0.452 [0.341—0.576]"
+"Camarhynchus parvulus",0.079,478,38,360,80,"0.071 [0.042—0.117]","0.211 [0.143—0.305]"
+"Camarhynchus psittacula",0.061,33,2,23,8,"0.07 [0.01—0.228]","0.256 [0.117—0.456]"
+"Camarhynchus pallidus",0.037,107,4,92,11,"0.055 [0.016—0.137]","0.119 [0.057—0.217]"
+"Geospiza magnirostris",0.08,25,2,17,6,"0.028 [0.004—0.104]","0.311 [0.128—0.546]"
+"Geospiza fortis",0.152,967,147,588,232,"0.088 [0.055—0.137]","0.329 [0.239—0.439]"
+"Geospiza fuliginosa",0.105,2342,246,1555,541,"0.091 [0.058—0.137]","0.29 [0.212—0.387]"
+"Geospiza scandens",0.075,147,11,95,41,"0.029 [0.013—0.059]","0.368 [0.248—0.507]"
+"Setophaga petechia",0.019,521,10,506,5,"0.019 [0.008—0.041]","0.011 [0.003—0.026]"
